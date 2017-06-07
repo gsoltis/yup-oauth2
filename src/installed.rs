@@ -30,7 +30,8 @@ const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
                                               client_id: &str,
                                               scopes: I,
-                                              redirect_uri: Option<String>)
+                                              redirect_uri: Option<String>,
+                                              access_type: Option<String>)
                                               -> String
     where T: AsRef<str> + 'a,
           I: IntoIterator<Item = &'a T>
@@ -45,12 +46,15 @@ fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
     scopes_string.pop();
 
     url.push_str(auth_uri);
-    vec![format!("?scope={}", scopes_string),
+    let mut v = vec![format!("?scope={}", scopes_string),
          format!("&redirect_uri={}",
                  redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())),
          format!("&response_type=code"),
-         format!("&client_id={}", client_id)]
-        .into_iter()
+         format!("&client_id={}", client_id)];
+    if let Some(at) = access_type {
+        v.push(format!("&access_type={}", at));
+    }
+    v.into_iter()
         .fold(url, |mut u, param| {
             u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET));
             u
@@ -129,12 +133,14 @@ impl<C> InstalledFlow<C>
     pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                              auth_delegate: &mut AD,
                                                              appsecret: &ApplicationSecret,
-                                                             scopes: S)
+                                                             scopes: S,
+                                                             access_type: Option<String>)
                                                              -> Result<Token, Box<Error>>
         where T: AsRef<str> + 'a,
               S: Iterator<Item = &'a T>
     {
-        let authcode = try!(self.get_authorization_code(auth_delegate, &appsecret, scopes));
+        let authcode = try!(self.get_authorization_code(auth_delegate, &appsecret, scopes,
+                                                        access_type));
         let tokens = try!(self.request_token(&appsecret, &authcode));
 
         // Successful response
@@ -165,7 +171,8 @@ impl<C> InstalledFlow<C>
     fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                                    auth_delegate: &mut AD,
                                                                    appsecret: &ApplicationSecret,
-                                                                   scopes: S)
+                                                                   scopes: S,
+                                                                   access_type: Option<String>)
                                                                    -> Result<String, Box<Error>>
         where T: AsRef<str> + 'a,
               S: Iterator<Item = &'a T>
@@ -175,7 +182,8 @@ impl<C> InstalledFlow<C>
                 let url = build_authentication_request_url(&appsecret.auth_uri,
                                                            &appsecret.client_id,
                                                            scopes,
-                                                           None);
+                                                           None,
+                                                           access_type);
                 match auth_delegate.present_user_url(&url, true /* need_code */) {
                     None => {
                         Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -196,7 +204,8 @@ impl<C> InstalledFlow<C>
                                                            scopes,
                                                            Some(format!("http://localhost:{}",
                                                                         self.port
-                                                                            .unwrap_or(8080))));
+                                                                            .unwrap_or(8080))),
+                                                           access_type);
                 auth_delegate.present_user_url(&url, false /* need_code */);
 
                 match self.auth_code_rcv.as_ref().unwrap().recv() {
@@ -243,7 +252,7 @@ impl<C> InstalledFlow<C>
             Result::Err(e) => return Result::Err(Box::new(e)),
             Result::Ok(mut response) => {
                 let result = response.read_to_string(&mut resp);
-
+                println!("Got RESP! {:?}", result);
                 match result {
                     Result::Err(e) => return Result::Err(Box::new(e)),
                     Result::Ok(_) => (),
@@ -341,7 +350,19 @@ mod tests {
                                                      rf.apps.googleusercontent.com",
                                                     vec![&"email".to_string(),
                                                          &"profile".to_string()],
+                                                    None,
                                                     None));
+        assert_eq!("https://accounts.google.\
+                    com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.0:\
+                    oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
+                    f.apps.googleusercontent.com&access_type=offline",
+        build_authentication_request_url("https://accounts.google.com/o/oauth2/auth",
+                                         "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
+                                                     rf.apps.googleusercontent.com",
+                                         vec![&"email".to_string(),
+                                              &"profile".to_string()],
+                                         None,
+                                         Some("offline".to_string())));
     }
 
     #[test]

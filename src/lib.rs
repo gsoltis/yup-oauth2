@@ -53,7 +53,7 @@
 //! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
 //!                         hyper::Client::new(),
 //!                         <MemoryStorage as Default>::default(), None)
-//!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
+//!                         .token(&["https://www.googleapis.com/auth/youtube.upload"], None);
 //! match res {
 //!     Ok(t) => {
 //!     // now you can use t.access_token to authenticate API calls within your

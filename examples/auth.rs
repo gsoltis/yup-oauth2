@@ -79,7 +79,7 @@ fn main() {
                     });
 
     match oauth2::Authenticator::new(&secret, StdoutHandler, client,
-                                        oauth2::NullStorage, None).token(&m.free) {
+                                        oauth2::NullStorage, None).token(&m.free, None) {
         Ok(t) => {
             println!("Authentication granted !");
             println!("You should store the following information for use, or revoke it.");

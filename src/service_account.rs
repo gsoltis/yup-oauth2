@@ -206,7 +206,8 @@ impl<'a, C> ServiceAccountAccess<C>
         }
     }
 
-    fn request_token(&mut self, scopes: &Vec<&str>) -> result::Result<Token, Box<error::Error>> {
+    fn request_token(&mut self, scopes: &Vec<&str>, _: Option<String>)
+        -> result::Result<Token, Box<error::Error>> {
         let mut claims = init_claims_from_key(&self.key, scopes);
         claims.sub = self.sub.clone();
         let signed = try!(JWT::new(claims)
@@ -245,7 +246,8 @@ impl<'a, C> ServiceAccountAccess<C>
 }
 
 impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
-    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
+    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
+        -> result::Result<Token, Box<error::Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>
     {
@@ -257,7 +259,7 @@ impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
             }
         }
 
-        let token = try!(self.request_token(&scps));
+        let token = try!(self.request_token(&scps, access_type));
         let _ = self.cache.set(hash, &scps, Some(token.clone()));
 
         Ok(token)
@@ -288,7 +290,7 @@ mod tests {
         let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
         let mut acc = ServiceAccountAccess::new(key, client);
         println!("{:?}",
-                 acc.token(vec![&"https://www.googleapis.com/auth/pubsub"]).unwrap());
+                 acc.token(vec![&"https://www.googleapis.com/auth/pubsub"], None).unwrap());
     }
 
     #[test]

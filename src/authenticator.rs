@@ -45,7 +45,8 @@ pub struct Authenticator<D, S, C> {
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
+        -> Result<Token, Box<Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>;
 
@@ -86,7 +87,8 @@ impl<D, S, C> Authenticator<D, S, C>
     }
 
 
-    fn do_installed_flow(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<Error>> {
+    fn do_installed_flow(&mut self, scopes: &Vec<&str>, access_type: Option<String>)
+        -> Result<Token, Box<Error>> {
         let installed_type;
 
         match self.flow_type {
@@ -100,7 +102,7 @@ impl<D, S, C> Authenticator<D, S, C>
         }
 
         let mut flow = InstalledFlow::new(self.client.borrow_mut(), installed_type);
-        flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter())
+        flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter(), access_type)
     }
 
     fn retrieve_device_token(&mut self, scopes: &Vec<&str>, code_url: String) -> Result<Token, Box<Error>> {
@@ -190,7 +192,8 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
     /// In any failure case, the delegate will be provided with additional information, and
     /// the caller will be informed about storage related errors.
     /// Otherwise it is guaranteed to be valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
+        -> Result<Token, Box<Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>
     {
@@ -263,8 +266,10 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     // get new token. The respective sub-routine will do all the logic.
                     match match self.flow_type.clone() {
                         FlowType::Device(url) => self.retrieve_device_token(&scopes, url),
-                        FlowType::InstalledInteractive => self.do_installed_flow(&scopes),
-                        FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes),
+                        FlowType::InstalledInteractive => self.do_installed_flow(&scopes,
+                                                                                 access_type),
+                        FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes,
+                                                                                 access_type),
                     } {
                         Ok(token) => {
                             loop {
@@ -339,7 +344,7 @@ mod tests {
         let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
                         hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
                         <MemoryStorage as Default>::default(), None)
-                        .token(&["https://www.googleapis.com/auth/youtube.upload"]);
+                        .token(&["https://www.googleapis.com/auth/youtube.upload"], None);
 
         match res {
             Ok(t) => assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg"),
