@@ -39,14 +39,14 @@ pub struct Authenticator<D, S, C> {
     storage: S,
     client: C,
     secret: ApplicationSecret,
+    access_type: Option<String>,
 }
 
 /// A provider for authorization tokens, yielding tokens valid for a given scope.
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
-        -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>;
 
@@ -83,7 +83,12 @@ impl<D, S, C> Authenticator<D, S, C>
             storage: storage,
             client: client,
             secret: secret.clone(),
+            access_type: None,
         }
+    }
+
+    pub fn set_offline_access(&mut self) {
+        self.access_type = Some("offline".to_string());
     }
 
 
@@ -192,8 +197,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
     /// In any failure case, the delegate will be provided with additional information, and
     /// the caller will be informed about storage related errors.
     /// Otherwise it is guaranteed to be valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
-        -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>
     {
@@ -262,14 +266,18 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     Ok(t)
                 }
                 Ok(None) => {
+                    let access_type = match self.access_type {
+                        Some(ref s) => Some(s.clone()),
+                        None => None
+                    };
                     // Nothing was in storage - get a new token
                     // get new token. The respective sub-routine will do all the logic.
                     match match self.flow_type.clone() {
                         FlowType::Device(url) => self.retrieve_device_token(&scopes, url),
-                        FlowType::InstalledInteractive => self.do_installed_flow(&scopes,
-                                                                                 access_type),
-                        FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes,
-                                                                                 access_type),
+                        FlowType::InstalledInteractive =>
+                            self.do_installed_flow(&scopes, access_type),
+                        FlowType::InstalledRedirect(_) =>
+                            self.do_installed_flow(&scopes, access_type),
                     } {
                         Ok(token) => {
                             loop {

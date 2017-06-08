@@ -246,8 +246,7 @@ impl<'a, C> ServiceAccountAccess<C>
 }
 
 impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
-    fn token<'b, I, T>(&mut self, scopes: I, access_type: Option<String>)
-        -> result::Result<Token, Box<error::Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
         where T: AsRef<str> + Ord + 'b,
               I: IntoIterator<Item = &'b T>
     {
@@ -259,7 +258,7 @@ impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
             }
         }
 
-        let token = try!(self.request_token(&scps, access_type));
+        let token = try!(self.request_token(&scps, None));
         let _ = self.cache.set(hash, &scps, Some(token.clone()));
 
         Ok(token)
